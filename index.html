@@ -473,6 +473,7 @@
                 slides.forEach(slide => observer.observe(slide));
                 updateUI(0, slides.length);
                 setTimeout(applyScaling, 100);
+                window.addEventListener('resize', applyScaling);
 
                 // Mobile browsers recompute scroll-snap positions while the
                 // URL bar animates, which can leave the page resting between
@@ -516,7 +517,21 @@
             });
         }
 
+        function applyCrops() {
+            // Size crop wrappers from their rendered height instead of
+            // relying on CSS aspect-ratio, which older iOS Safari ignores
+            // in this flex context (leaving wrappers at natural image
+            // width and blowing the whole spread out of scale).
+            document.querySelectorAll('.crop-wrapper').forEach(w => {
+                const m = w.className.match(/crop-(\d+)-(\d+)/);
+                if (!m) return;
+                const h = w.clientHeight;
+                if (h > 0) w.style.width = (h * m[1] / m[2]) + 'px';
+            });
+        }
+
         function applyScaling() {
+            applyCrops();
             const maxWidth = window.innerWidth * 0.92;
             document.querySelectorAll('.page-content').forEach(content => {
                 content.style.transform = '';
