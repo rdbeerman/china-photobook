@@ -265,9 +265,11 @@
 
             .swiper-slide {
                 height: 100vh;
-                height: 100dvh; /* tracks the live viewport so snaps stay flush even as chrome hides/shows */
+                /* svh (not dvh): stable while Safari's address bar
+                   shows/hides, so snap positions never shift mid-flick. */
+                height: 100svh;
                 scroll-snap-align: start;
-                padding: 3dvh 2vw;
+                padding: 3svh 2vw;
             }
 
             .page-content {
@@ -487,7 +489,7 @@
                 }
                 window.addEventListener('scroll', () => {
                     clearTimeout(settleTimer);
-                    settleTimer = setTimeout(realign, 140);
+                    settleTimer = setTimeout(realign, 250);
                 }, { passive: true });
                 return;
             }
