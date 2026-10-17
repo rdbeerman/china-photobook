@@ -181,47 +181,12 @@
 
             .page {
                 min-height: 100dvh;
-                padding: 2vh 2vw;
+                padding: 3vh 2vw;
             }
 
             .page-content {
-                height: auto;
-                max-height: 85vh;
-                max-width: 96vw;
+                height: 70vh;
                 gap: 0.75rem;
-            }
-
-            .img-col {
-                flex: 0 1 auto;
-                min-width: 0;
-                height: auto;
-                gap: 0.75rem;
-            }
-
-            .img-col img {
-                height: auto;
-                max-height: 85vh;
-                width: auto;
-                max-width: 100%;
-            }
-
-            .img-col.multi {
-                height: auto;
-            }
-
-            .img-col.multi img {
-                max-height: calc(42vh - 0.5rem);
-            }
-
-            .crop-wrapper {
-                height: auto;
-                max-height: 85vh;
-                flex-shrink: 1;
-            }
-
-            .img-col.multi .crop-wrapper {
-                height: auto;
-                max-height: calc(42vh - 0.5rem);
             }
 
             .page-number {
@@ -384,37 +349,21 @@
         }
 
         function applyScaling() {
-            requestAnimationFrame(() => {
-                const isMobile = window.innerHeight < 500;
-                document.querySelectorAll('.page-content').forEach(content => {
-                    content.style.transform = '';
+            document.querySelectorAll('.page-content').forEach(content => {
+                content.style.transform = '';
 
-                    // Get actual rendered size
-                    const rect = content.getBoundingClientRect();
-                    const maxWidth = window.innerWidth * (isMobile ? 0.96 : 0.90);
-                    const maxHeight = window.innerHeight * (isMobile ? 0.85 : 0.85);
+                const maxWidth = window.innerWidth * 0.94;
+                const contentWidth = content.scrollWidth;
 
-                    const scaleX = rect.width > maxWidth ? maxWidth / rect.width : 1;
-                    const scaleY = rect.height > maxHeight ? maxHeight / rect.height : 1;
-                    const scale = Math.min(scaleX, scaleY);
-
-                    if (scale < 0.99) {
-                        content.style.transform = `scale(${scale})`;
-                    }
-                });
+                if (contentWidth > maxWidth) {
+                    const scale = maxWidth / contentWidth;
+                    content.style.transform = `scale(${scale})`;
+                }
             });
         }
 
-        // Recalculate scaling on resize and after images load
         window.addEventListener('resize', applyScaling);
         window.addEventListener('load', applyScaling);
-
-        // Also apply scaling when lazy images load
-        document.addEventListener('load', (e) => {
-            if (e.target.tagName === 'IMG') {
-                applyScaling();
-            }
-        }, true);
 
         function setupScrollTracking() {
             const pages = document.querySelectorAll('.page');
