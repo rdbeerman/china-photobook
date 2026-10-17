@@ -100,10 +100,8 @@
         }
 
         .img-col.multi img {
-            flex: 1 1 0;
+            width: 100%;
             height: auto;
-            min-height: 0;
-            max-height: calc(50% - clamp(0.5625rem, 1.5vw, 1.125rem));
         }
 
         .crop-wrapper {
@@ -517,28 +515,59 @@
             });
         }
 
-        function applyCrops() {
-            // Size crop wrappers from their rendered height instead of
-            // relying on CSS aspect-ratio, which older iOS Safari ignores
-            // in this flex context (leaving wrappers at natural image
-            // width and blowing the whole spread out of scale).
-            document.querySelectorAll('.crop-wrapper').forEach(w => {
-                const m = w.className.match(/crop-(\d+)-(\d+)/);
-                if (!m) return;
-                const h = w.clientHeight;
-                if (h > 0) w.style.width = (h * m[1] / m[2]) + 'px';
-            });
+        function itemAspect(el) {
+            // Display aspect of a column item: design ratio for crops,
+            // natural ratio for plain images.
+            if (el.classList.contains('crop-wrapper')) {
+                const m = el.className.match(/crop-(\d+)-(\d+)/);
+                if (m) return +m[1] / +m[2];
+            }
+            const im = el.tagName === 'IMG' ? el : el.querySelector('img');
+            if (im && im.naturalWidth) return im.naturalWidth / im.naturalHeight;
+            return 1;
         }
 
         function applyScaling() {
-            applyCrops();
             const maxWidth = window.innerWidth * 0.92;
-            document.querySelectorAll('.page-content').forEach(content => {
-                content.style.transform = '';
-                const contentWidth = content.scrollWidth;
+
+            document.querySelectorAll('.page-content').forEach(pc => {
+                pc.style.transform = '';
+                const H = pc.clientHeight;
+                if (!H) return;
+
+                Array.from(pc.children).forEach(col => {
+                    const items = Array.from(col.children);
+                    if (!items.length) return;
+                    const aspects = items.map(itemAspect);
+
+                    if (items.length === 1) {
+                        // Single crop: width must follow design ratio;
+                        // older iOS Safari ignores CSS aspect-ratio here.
+                        if (items[0].classList.contains('crop-wrapper')) {
+                            items[0].style.width = (H * aspects[0]) + 'px';
+                            items[0].style.height = H + 'px';
+                        }
+                        return;
+                    }
+
+                    // Multi-image column: derive one shared width so every
+                    // image's box fits exactly (heights sum to column
+                    // height) — no letterboxed flex boxes misaligning
+                    // bottoms.
+                    const gap = parseFloat(getComputedStyle(col).rowGap) || 0;
+                    const inv = aspects.reduce((a, r) => a + 1 / r, 0);
+                    const W = (H - gap * (items.length - 1)) / inv;
+                    col.style.width = W + 'px';
+                    items.forEach((it, i) => {
+                        it.style.width = W + 'px';
+                        it.style.height = (W / aspects[i]) + 'px';
+                    });
+                });
+
+                const contentWidth = pc.scrollWidth;
                 if (contentWidth > maxWidth) {
                     const scale = maxWidth / contentWidth;
-                    content.style.transform = `scale(${scale})`;
+                    pc.style.transform = `scale(${scale})`;
                 }
             });
         }
