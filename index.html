@@ -163,6 +163,10 @@
 
         /* Mobile landscape adjustments */
         @media (max-height: 500px) {
+            html, body {
+                overflow-x: hidden;
+            }
+
             h1 {
                 font-size: 2rem;
                 letter-spacing: 0.3em;
@@ -180,13 +184,39 @@
             }
 
             .page {
-                min-height: 100dvh;
-                padding: 3vh 2vw;
+                min-height: auto;
+                height: auto;
+                padding: 10vh 3vw;
             }
 
             .page-content {
-                height: 70vh;
-                gap: 0.75rem;
+                height: auto;
+                max-width: 94vw;
+            }
+
+            .img-col {
+                height: auto;
+            }
+
+            .img-col img {
+                height: auto;
+                width: auto;
+                max-width: 90vw;
+                max-height: 70vh;
+            }
+
+            .img-col.multi img {
+                max-height: 35vh;
+            }
+
+            .crop-wrapper {
+                height: auto;
+                max-height: 70vh;
+            }
+
+            .img-col.multi .crop-wrapper {
+                height: auto;
+                max-height: 35vh;
             }
 
             .page-number {
@@ -349,6 +379,9 @@
         }
 
         function applyScaling() {
+            // Skip scaling on mobile - CSS handles it
+            if (window.innerHeight < 500) return;
+
             document.querySelectorAll('.page-content').forEach(content => {
                 content.style.transform = '';
 
@@ -422,22 +455,25 @@
                 }, 800);
             }
 
-            window.addEventListener('wheel', (e) => {
-                if (isScrolling) {
-                    e.preventDefault();
-                    return;
-                }
+            // Only use custom scroll on desktop
+            if (window.innerHeight >= 500) {
+                window.addEventListener('wheel', (e) => {
+                    if (isScrolling) {
+                        e.preventDefault();
+                        return;
+                    }
 
-                currentSection = findCurrentSection();
+                    currentSection = findCurrentSection();
 
-                if (e.deltaY > 0) {
-                    e.preventDefault();
-                    scrollToSection(currentSection + 1);
-                } else if (e.deltaY < 0) {
-                    e.preventDefault();
-                    scrollToSection(currentSection - 1);
-                }
-            }, { passive: false });
+                    if (e.deltaY > 0) {
+                        e.preventDefault();
+                        scrollToSection(currentSection + 1);
+                    } else if (e.deltaY < 0) {
+                        e.preventDefault();
+                        scrollToSection(currentSection - 1);
+                    }
+                }, { passive: false });
+            }
 
             // Handle keyboard navigation
             window.addEventListener('keydown', (e) => {
