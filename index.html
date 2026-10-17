@@ -62,6 +62,7 @@
             justify-content: center;
             align-items: center;
             padding: 5vh 4vw;
+            overflow: hidden;
         }
 
         .page-content {
@@ -70,8 +71,8 @@
             align-items: stretch;
             gap: clamp(1.125rem, 3vw, 2.25rem);
             height: 75vh;
-            max-width: 92vw;
             transform-origin: center center;
+            will-change: transform;
         }
 
         .img-col {
@@ -85,7 +86,6 @@
         .img-col img {
             height: 100%;
             width: auto;
-            max-width: 100%;
             object-fit: contain;
         }
 
@@ -167,8 +167,8 @@
 
         /* Mobile landscape adjustments */
         @media (max-height: 500px) {
-            html, body {
-                overflow-x: hidden;
+            html {
+                scroll-behavior: auto;
             }
 
             h1 {
@@ -356,35 +356,92 @@
 
             container.innerHTML = html;
 
-            // Scale down pages that are too wide
-            applyScaling();
+            // Initial scaling after render
+            invalidateMeasurements();
+            scheduleScaling();
         }
 
-        function applyScaling() {
-            requestAnimationFrame(() => {
-                document.querySelectorAll('.page-content').forEach(content => {
-                    content.style.transform = '';
+        // Store measured widths to avoid remeasuring on every resize
+        const measuredWidths = new WeakMap();
+        let pendingMeasure = null;
+        let needsFullRemeasure = false;
 
-                    const maxWidth = window.innerWidth * 0.94;
-                    const contentWidth = content.scrollWidth;
+        function measureAndApply() {
+            const maxWidth = window.innerWidth * 0.92;
+            const contents = [...document.querySelectorAll('.page-content')];
 
-                    if (contentWidth > maxWidth) {
-                        const scale = maxWidth / contentWidth;
-                        content.style.transform = `scale(${scale})`;
-                    }
+            // Check if any content needs remeasuring
+            const needsMeasure = contents.some(c => !measuredWidths.has(c)) || needsFullRemeasure;
+
+            if (needsMeasure) {
+                // Hide content briefly during measurement to prevent flash
+                contents.forEach(c => {
+                    c.style.visibility = 'hidden';
+                    c.style.transform = 'none';
                 });
+
+                // Force layout
+                document.body.offsetHeight;
+
+                // Measure all
+                contents.forEach(content => {
+                    measuredWidths.set(content, content.offsetWidth);
+                });
+
+                needsFullRemeasure = false;
+            }
+
+            // Apply scales
+            contents.forEach(content => {
+                const contentWidth = measuredWidths.get(content);
+
+                if (contentWidth > maxWidth) {
+                    const scale = maxWidth / contentWidth;
+                    content.style.transform = `scale(${scale})`;
+                } else {
+                    content.style.transform = '';
+                }
+                content.style.visibility = '';
             });
         }
 
-        window.addEventListener('resize', applyScaling);
-        window.addEventListener('load', applyScaling);
+        function invalidateMeasurements(element) {
+            if (element) {
+                measuredWidths.delete(element);
+            } else {
+                needsFullRemeasure = true;
+            }
+        }
 
-        // Re-apply scaling when lazy images load
+        function scheduleScaling() {
+            if (pendingMeasure) return;
+            pendingMeasure = requestAnimationFrame(() => {
+                pendingMeasure = null;
+                measureAndApply();
+            });
+        }
+
+        // Debounced resize handler
+        let resizeTimeout;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(measureAndApply, 16);
+        });
+
+        // Handle image loads - need to remeasure when images load
         document.addEventListener('load', (e) => {
             if (e.target.tagName === 'IMG') {
-                applyScaling();
+                const pageContent = e.target.closest('.page-content');
+                invalidateMeasurements(pageContent);
+                scheduleScaling();
             }
         }, true);
+
+        // Also run on full page load
+        window.addEventListener('load', () => {
+            invalidateMeasurements();
+            scheduleScaling();
+        });
 
         function setupScrollTracking() {
             const pages = document.querySelectorAll('.page');
