@@ -1,0 +1,14 @@
+# Ignore original/large images - only deploy optimized
+images/*
+!images/optimized/
+
+# Python
+*.py
+__pycache__/
+*.pyc
+
+# JSON exports (not needed for site)
+images_order.json
+
+# OS files
+.DS_Store

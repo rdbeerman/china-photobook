@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>China</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-snap-type: y mandatory;
+        }
+
+        body {
+            background: #fff;
+            color: #000;
+            font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+        }
+
+        header {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            border-bottom: 1px solid #eee;
+            scroll-snap-align: start;
+        }
+
+        h1 {
+            font-size: 4rem;
+            font-weight: 300;
+            letter-spacing: 0.5em;
+            margin-left: 0.5em;
+        }
+
+        .subtitle {
+            font-size: 0.875rem;
+            font-weight: 300;
+            letter-spacing: 0.15em;
+            color: #666;
+            margin-top: 1.5rem;
+        }
+
+        .scroll-hint {
+            position: absolute;
+            bottom: 3rem;
+            font-size: 0.75rem;
+            letter-spacing: 0.2em;
+            color: #999;
+            text-transform: uppercase;
+        }
+
+        .page {
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 5vh 4vw;
+            scroll-snap-align: start;
+        }
+
+        .page-content {
+            display: flex;
+            justify-content: center;
+            align-items: stretch;
+            gap: clamp(1.125rem, 3vw, 2.25rem);
+            height: 75vh;
+            transform-origin: center center;
+        }
+
+        .img-col {
+            display: flex;
+            flex-direction: column;
+            gap: clamp(1.125rem, 3vw, 2.25rem);
+            flex: 0 0 auto;
+            height: 100%;
+        }
+
+        .img-col img {
+            height: 100%;
+            width: auto;
+            object-fit: contain;
+        }
+
+        .img-col.multi {
+            height: 100%;
+        }
+
+        .img-col.multi img {
+            flex: 1 1 0;
+            height: auto;
+            min-height: 0;
+            max-height: calc(50% - clamp(0.5625rem, 1.5vw, 1.125rem));
+        }
+
+        .crop-wrapper {
+            overflow: hidden;
+            height: 100%;
+            flex-shrink: 0;
+        }
+
+        .crop-wrapper img {
+            object-fit: cover;
+            width: 100%;
+            height: 100%;
+        }
+
+        .img-col.multi .crop-wrapper {
+            flex: 1 1 0;
+            height: auto;
+            min-height: 0;
+        }
+
+        .crop-1-1 { aspect-ratio: 1 / 1; }
+        .crop-2-3 { aspect-ratio: 2 / 3; }
+        .crop-3-2 { aspect-ratio: 3 / 2; }
+        .crop-248-183 { aspect-ratio: 248 / 183; }
+
+        /* Rotate prompt for mobile portrait */
+        .rotate-prompt {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: #fff;
+            z-index: 1000;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 2rem;
+        }
+
+        .rotate-prompt svg {
+            width: 64px;
+            height: 64px;
+            margin-bottom: 2rem;
+            animation: rotate-hint 2s ease-in-out infinite;
+        }
+
+        @keyframes rotate-hint {
+            0%, 100% { transform: rotate(0deg); }
+            50% { transform: rotate(90deg); }
+        }
+
+        .rotate-prompt p {
+            font-size: 1rem;
+            color: #666;
+            letter-spacing: 0.1em;
+        }
+
+        @media (max-width: 900px) and (orientation: portrait) {
+            .rotate-prompt {
+                display: flex;
+            }
+
+            header, main, footer, .progress, .page-number {
+                display: none;
+            }
+        }
+
+        /* Mobile landscape adjustments */
+        @media (max-height: 500px) {
+            h1 {
+                font-size: 2rem;
+                letter-spacing: 0.3em;
+                margin-left: 0.3em;
+            }
+
+            .subtitle {
+                font-size: 0.7rem;
+                margin-top: 0.75rem;
+            }
+
+            .scroll-hint {
+                font-size: 0.6rem;
+                bottom: 1.5rem;
+            }
+
+            .page-content {
+                height: 80vh;
+            }
+
+            .page-number {
+                bottom: 1rem;
+                right: 1rem;
+                font-size: 0.65rem;
+            }
+        }
+
+        .progress {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 2px;
+            background: #000;
+            width: 0%;
+            z-index: 100;
+            transition: width 0.1s;
+        }
+
+        .page-number {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            font-size: 0.75rem;
+            color: #999;
+            letter-spacing: 0.1em;
+        }
+
+        footer {
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-top: 1px solid #eee;
+            color: #999;
+            font-size: 0.75rem;
+            letter-spacing: 0.2em;
+            scroll-snap-align: start;
+        }
+    </style>
+</head>
+<body>
+    <div class="rotate-prompt">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="4" y="2" width="16" height="20" rx="2" />
+            <line x1="12" y1="18" x2="12" y2="18.01" stroke-width="2" stroke-linecap="round" />
+        </svg>
+        <p>Rotate your device to landscape</p>
+    </div>
+
+    <div class="progress" id="progress"></div>
+
+    <header>
+        <h1>CHINA</h1>
+        <p class="subtitle">by Tim Kraus & Robin Beerman</p>
+        <div class="scroll-hint">Scroll to explore</div>
+    </header>
+
+    <main id="pages"></main>
+
+    <footer>
+        <span>End</span>
+    </footer>
+
+    <div class="page-number" id="pageNumber"></div>
+
+    <script>
+        let layout = null;
+
+        async function init() {
+            const response = await fetch('layout.json');
+            layout = await response.json();
+            renderPages();
+            setupScrollTracking();
+        }
+
+        function getImagePath(filename) {
+            return `images/optimized/${filename}`;
+        }
+
+        function renderPages() {
+            const container = document.getElementById('pages');
+            let html = '';
+            let pageNum = 0;
+
+            layout.spreads.forEach((spread) => {
+                pageNum++;
+
+                // Collect all images from spread
+                const allImages = [];
+                spread.pages.forEach(page => {
+                    page.images.forEach(img => {
+                        allImages.push({
+                            filename: img.filename,
+                            left: img.position.left,
+                            top: img.position.top,
+                            width: img.position.width,
+                            height: img.position.height,
+                            crop: img.crop || null,
+                            cropPosition: img.cropPosition || null,
+                            cropZoom: img.cropZoom || null
+                        });
+                    });
+                });
+
+                // Sort by left position first
+                allImages.sort((a, b) => a.left - b.left);
+
+                // Group into columns by x position (tolerance 300px)
+                const columns = [];
+                allImages.forEach(img => {
+                    const existingCol = columns.find(col =>
+                        Math.abs(col[0].left - img.left) < 300
+                    );
+                    if (existingCol) {
+                        existingCol.push(img);
+                    } else {
+                        columns.push([img]);
+                    }
+                });
+
+                // Sort each column by top position
+                columns.forEach(col => col.sort((a, b) => a.top - b.top));
+
+                // Render
+                function renderImg(img) {
+                    const styles = [];
+                    if (img.cropPosition) styles.push(`object-position: ${img.cropPosition}`);
+                    if (img.cropZoom) styles.push(`transform: scale(${img.cropZoom})`);
+                    const styleAttr = styles.length ? `style="${styles.join('; ')}"` : '';
+
+                    if (img.crop) {
+                        const cropClass = 'crop-' + img.crop.replace(':', '-');
+                        return `<div class="crop-wrapper ${cropClass}">
+                            <img src="${getImagePath(img.filename)}" alt="" loading="lazy" ${styleAttr}>
+                        </div>`;
+                    }
+                    return `<img src="${getImagePath(img.filename)}" alt="" loading="lazy">`;
+                }
+
+                html += `
+                    <section class="page" data-page="${pageNum}">
+                        <div class="page-content">
+                            ${columns.map(col => `
+                                <div class="img-col ${col.length > 1 ? 'multi' : ''}">
+                                    ${col.map(img => renderImg(img)).join('')}
+                                </div>
+                            `).join('')}
+                        </div>
+                    </section>
+                `;
+            });
+
+            container.innerHTML = html;
+
+            // Scale down pages that are too wide
+            applyScaling();
+        }
+
+        function applyScaling() {
+            requestAnimationFrame(() => {
+                document.querySelectorAll('.page-content').forEach(content => {
+                    content.style.transform = '';
+                    const maxWidth = window.innerWidth * 0.9;
+                    const actualWidth = content.scrollWidth;
+                    if (actualWidth > maxWidth) {
+                        const scale = maxWidth / actualWidth;
+                        content.style.transform = `scale(${scale})`;
+                    }
+                });
+            });
+        }
+
+        // Recalculate scaling on resize
+        window.addEventListener('resize', () => {
+            applyScaling();
+        });
+
+        function setupScrollTracking() {
+            const pages = document.querySelectorAll('.page');
+            const totalPages = pages.length;
+            const progressBar = document.getElementById('progress');
+            const pageNumber = document.getElementById('pageNumber');
+
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        const num = entry.target.dataset.page;
+                        pageNumber.textContent = `${num} / ${totalPages}`;
+                    }
+                });
+            }, { threshold: 0.5 });
+
+            pages.forEach(page => observer.observe(page));
+
+            window.addEventListener('scroll', () => {
+                const scrolled = window.scrollY;
+                const total = document.documentElement.scrollHeight - window.innerHeight;
+                const progress = (scrolled / total) * 100;
+                progressBar.style.width = `${progress}%`;
+            });
+        }
+
+        init();
+    </script>
+</body>
+</html>
