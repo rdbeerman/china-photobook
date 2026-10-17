@@ -528,6 +528,54 @@
             });
         }
 
+        // Remote debugging: open the page with ?debug to overlay live
+        // layout numbers so a screenshot can diagnose device-only issues.
+        const DEBUG = new URLSearchParams(location.search).has('debug');
+        function debugDump() {
+            if (!DEBUG) return;
+            const slides = Array.from(document.querySelectorAll('.swiper-slide'));
+            if (slides.length < 2) return;
+            const slideH = slides[1].offsetTop - slides[0].offsetTop;
+            const idx = Math.min(slides.length - 1, Math.max(0, Math.round(scrollY / (slideH || 1))));
+            const slide = slides[idx];
+            const doc = document.documentElement;
+            let el = document.getElementById('debugOverlay');
+            if (!el) {
+                el = document.createElement('pre');
+                el.id = 'debugOverlay';
+                el.style.cssText = 'position:fixed;left:0;top:0;z-index:9999;background:rgba(255,255,255,0.92);font:10px/1.35 monospace;padding:6px;pointer-events:none;color:#000;max-width:60vw';
+                document.body.appendChild(el);
+            }
+            const lines = [
+                `desktop=${matchMedia('(hover: hover) and (pointer: fine)').matches} scrollY=${Math.round(scrollY)} slideH=${Math.round(slideH)}`,
+                `vw=${innerWidth} vh=${innerHeight} docW=${doc.scrollWidth} docH=${doc.scrollHeight} dpr=${devicePixelRatio}`
+            ];
+            lines.push(`slide[${idx}] rect=${Math.round(slide.getBoundingClientRect().width)}x${Math.round(slide.getBoundingClientRect().height)} pos=${Math.round(slide.getBoundingClientRect().top)} pad=${getComputedStyle(slide).padding}`);
+            const pc = slide.querySelector('.page-content');
+            if (pc) {
+                const r = pc.getBoundingClientRect();
+                lines.push(`pc css-h=${getComputedStyle(pc).height} rect=${Math.round(r.width)}x${Math.round(r.height)} scrollW=${pc.scrollWidth} tf="${pc.style.transform || 'none'}"`);
+                Array.from(pc.children).forEach((col, ci) => {
+                    const cr = col.getBoundingClientRect();
+                    const kids = Array.from(col.children).map(k => {
+                        const kr = k.getBoundingClientRect();
+                        return `${k.tagName}:${Math.round(kr.width)}x${Math.round(kr.height)}`;
+                    }).join(' ');
+                    lines.push(`  col${ci} rect=${Math.round(cr.width)}x${Math.round(cr.height)} [${kids}]`);
+                });
+                pc.querySelectorAll('img').forEach((im, ii) => {
+                    const cs = getComputedStyle(im);
+                    lines.push(`   img${ii} nat=${im.naturalWidth}x${im.naturalHeight} rect=${Math.round(im.getBoundingClientRect().width)}x${Math.round(im.getBoundingClientRect().height)} fit=${cs.objectFit} ar=${cs.aspectRatio} complete=${im.complete} st="${im.getAttribute('style') || ''}"`);
+                });
+            }
+            el.textContent = lines.join('\n');
+        }
+        if (DEBUG) {
+            window.addEventListener('scroll', debugDump, { passive: true });
+            window.addEventListener('resize', debugDump);
+            setInterval(debugDump, 700);
+        }
+
         init();
     </script>
 </body>
