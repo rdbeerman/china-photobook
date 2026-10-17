@@ -265,11 +265,9 @@
 
             .swiper-slide {
                 height: 100vh;
-                /* svh (not dvh): stable while Safari's address bar
-                   shows/hides, so snap positions never shift mid-flick. */
-                height: 100svh;
+                height: 100dvh; /* fill the viewport; index-anchored realign keeps snaps stable */
                 scroll-snap-align: start;
-                padding: 3svh 2vw;
+                padding: 3dvh 2vw;
             }
 
             .page-content {
@@ -476,12 +474,14 @@
                 window.addEventListener('resize', applyScaling);
 
                 // Mobile browsers recompute scroll-snap positions while the
-                // URL bar animates, which can leave the page resting between
-                // slides. After scrolling settles, nudge back to the nearest
-                // slide. The bar animation fires no scroll events (only
-                // resize/visualViewport ones) and can even shift the scroll
-                // offset itself, so listen to all of them and retry a few
-                // times, skipping while the finger is still on the screen.
+                // URL bar animates. With dvh-sized slides that animation also
+                // rescales the whole slide grid, so a landing computed from
+                // stale geometry can end up two or three slides away. Track
+                // the slide height continuously during scrolling, and after
+                // things settle, re-anchor to the same slide INDEX in the new
+                // geometry. Bar animations fire no scroll events (only
+                // resize/visualViewport ones) and can shift the offset itself,
+                // so listen to everything and retry; skip while touching.
                 let touching = false;
                 document.addEventListener('touchstart', () => { touching = true; }, { passive: true });
                 document.addEventListener('touchend', () => {
@@ -489,13 +489,19 @@
                     scheduleRealign();
                 }, { passive: true });
 
-                let settleTimers = [];
+                let hCache = 0;
+                const currentSlideH = () => slides[1].offsetTop - slides[0].offsetTop;
+
                 function realign() {
                     if (touching) return;
-                    const slideH = slides[1].offsetTop - slides[0].offsetTop;
-                    if (!slideH) return;
-                    const target = Math.round(window.scrollY / slideH) * slideH;
-                    if (Math.abs(window.scrollY - target) > 4) {
+                    const h = currentSlideH();
+                    if (!h) return;
+                    // Index resolved in the geometry the offset was created
+                    // with (hCache), then applied to the current height.
+                    const idx = Math.round(window.scrollY / (hCache || h));
+                    const target = idx * h;
+                    if (Math.abs(window.scrollY - target) > 6) {
+                        hCache = h;
                         window.scrollTo({ top: target, behavior: 'smooth' });
                     }
                 }
@@ -503,10 +509,24 @@
                     settleTimers.forEach(clearTimeout);
                     settleTimers = [150, 450, 800].map(d => setTimeout(realign, d));
                 }
-                window.addEventListener('scroll', scheduleRealign, { passive: true });
-                window.addEventListener('resize', scheduleRealign);
+                let settleTimers = [];
+
+                window.addEventListener('scroll', () => {
+                    const h = currentSlideH();
+                    if (h) hCache = h;
+                    scheduleRealign();
+                }, { passive: true });
+
+                const onViewportResize = () => {
+                    // A bar toggle resized every slide; realign without delay
+                    // (while the old hCache still maps the offset to the right
+                    // slide) and retry past any blocked scroll writes.
+                    realign();
+                    scheduleRealign();
+                };
+                window.addEventListener('resize', onViewportResize);
                 if (window.visualViewport) {
-                    window.visualViewport.addEventListener('resize', scheduleRealign);
+                    window.visualViewport.addEventListener('resize', onViewportResize);
                     window.visualViewport.addEventListener('scroll', scheduleRealign);
                 }
                 return;
