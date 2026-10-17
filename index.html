@@ -312,6 +312,33 @@
             return `images/optimized/${filename}`;
         }
 
+        // Mobile browsers abort in-flight lazy image requests during fast
+        // fling scrolling, which can leave images permanently broken.
+        // Retry failed loads, and re-request anything still broken when a
+        // slide becomes active.
+        function retryBrokenImages(slide) {
+            slide.querySelectorAll('img').forEach(img => {
+                if (img.complete && img.naturalWidth === 0) {
+                    const src = img.getAttribute('src');
+                    img.removeAttribute('src');
+                    img.setAttribute('src', src);
+                }
+            });
+        }
+
+        document.addEventListener('error', (e) => {
+            const img = e.target;
+            if (img.tagName !== 'IMG') return;
+            const tries = +(img.dataset.tries || 0);
+            if (tries >= 3) return;
+            img.dataset.tries = tries + 1;
+            setTimeout(() => {
+                const src = img.getAttribute('src');
+                img.removeAttribute('src');
+                img.setAttribute('src', src);
+            }, 300 * (tries + 1));
+        }, true);
+
         function renderSlides() {
             const container = document.getElementById('slides');
             let html = '';
@@ -439,6 +466,7 @@
                     entries.forEach(entry => {
                         if (entry.isIntersecting) {
                             updateUI(slides.indexOf(entry.target), slides.length);
+                            retryBrokenImages(entry.target);
                         }
                     });
                 }, { threshold: 0.55 });
@@ -475,6 +503,7 @@
                 on: {
                     slideChange: function() {
                         updateUI(this.activeIndex, this.slides.length);
+                        retryBrokenImages(this.slides[this.activeIndex]);
                     },
                     init: function() {
                         // Apply scaling after init
