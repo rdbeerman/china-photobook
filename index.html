@@ -13,12 +13,14 @@
 
         html {
             scroll-behavior: smooth;
+            overflow-x: hidden;
         }
 
         body {
             background: #fff;
             color: #000;
             font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+            overflow-x: hidden;
         }
 
         header {
@@ -68,6 +70,7 @@
             align-items: stretch;
             gap: clamp(1.125rem, 3vw, 2.25rem);
             height: 75vh;
+            max-width: 92vw;
             transform-origin: center center;
         }
 
@@ -82,6 +85,7 @@
         .img-col img {
             height: 100%;
             width: auto;
+            max-width: 100%;
             object-fit: contain;
         }
 
@@ -184,39 +188,17 @@
             }
 
             .page {
-                min-height: auto;
-                height: auto;
-                padding: 10vh 3vw;
+                min-height: 100dvh;
+                padding: 5vh 2vw;
             }
 
             .page-content {
-                height: auto;
-                max-width: 94vw;
+                height: 75vh;
+                gap: 0.5rem;
             }
 
             .img-col {
-                height: auto;
-            }
-
-            .img-col img {
-                height: auto;
-                width: auto;
-                max-width: 90vw;
-                max-height: 70vh;
-            }
-
-            .img-col.multi img {
-                max-height: 35vh;
-            }
-
-            .crop-wrapper {
-                height: auto;
-                max-height: 70vh;
-            }
-
-            .img-col.multi .crop-wrapper {
-                height: auto;
-                max-height: 35vh;
+                gap: 0.5rem;
             }
 
             .page-number {
@@ -379,24 +361,30 @@
         }
 
         function applyScaling() {
-            // Skip scaling on mobile - CSS handles it
-            if (window.innerHeight < 500) return;
+            requestAnimationFrame(() => {
+                document.querySelectorAll('.page-content').forEach(content => {
+                    content.style.transform = '';
 
-            document.querySelectorAll('.page-content').forEach(content => {
-                content.style.transform = '';
+                    const maxWidth = window.innerWidth * 0.94;
+                    const contentWidth = content.scrollWidth;
 
-                const maxWidth = window.innerWidth * 0.94;
-                const contentWidth = content.scrollWidth;
-
-                if (contentWidth > maxWidth) {
-                    const scale = maxWidth / contentWidth;
-                    content.style.transform = `scale(${scale})`;
-                }
+                    if (contentWidth > maxWidth) {
+                        const scale = maxWidth / contentWidth;
+                        content.style.transform = `scale(${scale})`;
+                    }
+                });
             });
         }
 
         window.addEventListener('resize', applyScaling);
         window.addEventListener('load', applyScaling);
+
+        // Re-apply scaling when lazy images load
+        document.addEventListener('load', (e) => {
+            if (e.target.tagName === 'IMG') {
+                applyScaling();
+            }
+        }, true);
 
         function setupScrollTracking() {
             const pages = document.querySelectorAll('.page');
