@@ -12,7 +12,7 @@
         }
 
         html {
-            scroll-snap-type: y mandatory;
+            scroll-behavior: smooth;
         }
 
         body {
@@ -28,7 +28,6 @@
             justify-content: center;
             align-items: center;
             border-bottom: 1px solid #eee;
-            scroll-snap-align: start;
         }
 
         h1 {
@@ -61,7 +60,6 @@
             justify-content: center;
             align-items: center;
             padding: 5vh 4vw;
-            scroll-snap-align: start;
         }
 
         .page-content {
@@ -165,10 +163,6 @@
 
         /* Mobile landscape adjustments */
         @media (max-height: 500px) {
-            html {
-                scroll-snap-type: y proximity;
-            }
-
             h1 {
                 font-size: 2rem;
                 letter-spacing: 0.3em;
@@ -191,7 +185,43 @@
             }
 
             .page-content {
-                height: 80vh;
+                height: auto;
+                max-height: 85vh;
+                max-width: 96vw;
+                gap: 0.75rem;
+            }
+
+            .img-col {
+                flex: 0 1 auto;
+                min-width: 0;
+                height: auto;
+                gap: 0.75rem;
+            }
+
+            .img-col img {
+                height: auto;
+                max-height: 85vh;
+                width: auto;
+                max-width: 100%;
+            }
+
+            .img-col.multi {
+                height: auto;
+            }
+
+            .img-col.multi img {
+                max-height: calc(42vh - 0.5rem);
+            }
+
+            .crop-wrapper {
+                height: auto;
+                max-height: 85vh;
+                flex-shrink: 1;
+            }
+
+            .img-col.multi .crop-wrapper {
+                height: auto;
+                max-height: calc(42vh - 0.5rem);
             }
 
             .page-number {
@@ -232,7 +262,6 @@
             color: #999;
             font-size: 0.75rem;
             letter-spacing: 0.2em;
-            scroll-snap-align: start;
         }
     </style>
 </head>
@@ -356,18 +385,20 @@
 
         function applyScaling() {
             requestAnimationFrame(() => {
+                const isMobile = window.innerHeight < 500;
                 document.querySelectorAll('.page-content').forEach(content => {
                     content.style.transform = '';
-                    const maxWidth = window.innerWidth * 0.92;
-                    const maxHeight = window.innerHeight * 0.85;
-                    const actualWidth = content.scrollWidth;
-                    const actualHeight = content.scrollHeight;
 
-                    const scaleX = actualWidth > maxWidth ? maxWidth / actualWidth : 1;
-                    const scaleY = actualHeight > maxHeight ? maxHeight / actualHeight : 1;
+                    // Get actual rendered size
+                    const rect = content.getBoundingClientRect();
+                    const maxWidth = window.innerWidth * (isMobile ? 0.96 : 0.90);
+                    const maxHeight = window.innerHeight * (isMobile ? 0.85 : 0.85);
+
+                    const scaleX = rect.width > maxWidth ? maxWidth / rect.width : 1;
+                    const scaleY = rect.height > maxHeight ? maxHeight / rect.height : 1;
                     const scale = Math.min(scaleX, scaleY);
 
-                    if (scale < 1) {
+                    if (scale < 0.99) {
                         content.style.transform = `scale(${scale})`;
                     }
                 });
@@ -407,6 +438,77 @@
                 const total = document.documentElement.scrollHeight - window.innerHeight;
                 const progress = (scrolled / total) * 100;
                 progressBar.style.width = `${progress}%`;
+            });
+
+            // Section-based scrolling for consistent cross-browser behavior
+            const sections = [document.querySelector('header'), ...pages, document.querySelector('footer')];
+            let isScrolling = false;
+            let currentSection = 0;
+
+            function findCurrentSection() {
+                const scrollY = window.scrollY;
+                const viewportHeight = window.innerHeight;
+
+                for (let i = sections.length - 1; i >= 0; i--) {
+                    const rect = sections[i].getBoundingClientRect();
+                    const sectionTop = scrollY + rect.top;
+                    if (scrollY >= sectionTop - viewportHeight / 3) {
+                        return i;
+                    }
+                }
+                return 0;
+            }
+
+            function scrollToSection(index) {
+                if (index < 0) index = 0;
+                if (index >= sections.length) index = sections.length - 1;
+
+                isScrolling = true;
+                currentSection = index;
+
+                sections[index].scrollIntoView({ behavior: 'smooth' });
+
+                setTimeout(() => {
+                    isScrolling = false;
+                }, 800);
+            }
+
+            window.addEventListener('wheel', (e) => {
+                if (isScrolling) {
+                    e.preventDefault();
+                    return;
+                }
+
+                currentSection = findCurrentSection();
+
+                if (e.deltaY > 0) {
+                    e.preventDefault();
+                    scrollToSection(currentSection + 1);
+                } else if (e.deltaY < 0) {
+                    e.preventDefault();
+                    scrollToSection(currentSection - 1);
+                }
+            }, { passive: false });
+
+            // Handle keyboard navigation
+            window.addEventListener('keydown', (e) => {
+                if (isScrolling) return;
+
+                currentSection = findCurrentSection();
+
+                if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') {
+                    e.preventDefault();
+                    scrollToSection(currentSection + 1);
+                } else if (e.key === 'ArrowUp' || e.key === 'PageUp') {
+                    e.preventDefault();
+                    scrollToSection(currentSection - 1);
+                } else if (e.key === 'Home') {
+                    e.preventDefault();
+                    scrollToSection(0);
+                } else if (e.key === 'End') {
+                    e.preventDefault();
+                    scrollToSection(sections.length - 1);
+                }
             });
         }
 
