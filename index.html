@@ -23,54 +23,6 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
         }
 
-        /*
-         * Desktop (mouse/trackpad): fixed viewport, Swiper transforms give
-         * smooth one-slide-at-a-time snapping in Chrome/Firefox/Safari.
-         */
-        @media (hover: hover) and (pointer: fine) {
-            html, body {
-                height: 100dvh;
-                overflow: hidden;
-            }
-        }
-
-        /*
-         * Touch devices: browsers only collapse their URL/tab bar when the
-         * *document* itself scrolls natively. Swiper's transform mode (and
-         * even its cssMode, which scrolls an inner container) never scrolls
-         * the document, so mobile Safari keeps its chrome visible no matter
-         * what. Here we let the page scroll natively and get snapping from
-         * CSS scroll-snap, which iOS Safari honours on touch drags.
-         */
-        @media not all and (hover: hover) and (pointer: fine) {
-            html {
-                scroll-snap-type: y mandatory;
-                overscroll-behavior-y: none;
-            }
-
-            /* Neutralise Swiper's container styles; slides stack in flow */
-            .swiper {
-                height: auto;
-                overflow: visible;
-            }
-
-            .swiper-wrapper {
-                display: block;
-                transform: none !important;
-            }
-
-            .swiper-slide {
-                height: 100vh;
-                height: 100dvh; /* tracks the live viewport so snaps stay flush even as chrome hides/shows */
-                scroll-snap-align: start;
-                padding: 3dvh 2vw;
-            }
-
-            .page-content {
-                height: 100%; /* fill the slide; scaling clamps width */
-            }
-        }
-
         .swiper {
             width: 100%;
             height: 100%;
@@ -277,6 +229,54 @@
             z-index: 50;
             pointer-events: none;
         }
+        /*
+         * Desktop (mouse/trackpad): fixed viewport, Swiper transforms give
+         * smooth one-slide-at-a-time snapping in Chrome/Firefox/Safari.
+         */
+        @media (hover: hover) and (pointer: fine) {
+            html, body {
+                height: 100dvh;
+                overflow: hidden;
+            }
+        }
+
+        /*
+         * Touch devices: browsers only collapse their URL/tab bar when the
+         * *document* itself scrolls natively. Swiper's transform mode (and
+         * even its cssMode, which scrolls an inner container) never scrolls
+         * the document, so mobile Safari keeps its chrome visible no matter
+         * what. Here we let the page scroll natively and get snapping from
+         * CSS scroll-snap, which iOS Safari honours on touch drags.
+         */
+        @media not all and (hover: hover) and (pointer: fine) {
+            html {
+                scroll-snap-type: y mandatory;
+                overscroll-behavior-y: none;
+            }
+
+            /* Neutralise Swiper's container styles; slides stack in flow */
+            .swiper {
+                height: auto;
+                overflow: visible;
+            }
+
+            .swiper-wrapper {
+                display: block;
+                transform: none !important;
+            }
+
+            .swiper-slide {
+                height: 100vh;
+                height: 100dvh; /* tracks the live viewport so snaps stay flush even as chrome hides/shows */
+                scroll-snap-align: start;
+                padding: 3dvh 2vw;
+            }
+
+            .page-content {
+                height: 100%; /* fill the slide; scaling clamps width */
+            }
+        }
+
     </style>
 </head>
 <body>
@@ -363,6 +363,11 @@
                     const styles = [];
                     if (img.cropPosition) styles.push(`object-position: ${img.cropPosition}`);
                     if (img.cropZoom) styles.push(`transform: scale(${img.cropZoom})`);
+                    if (!img.crop) {
+                        // Reserve space before the file decodes so column
+                        // widths and scaling don't jump as images load in.
+                        styles.push(`aspect-ratio: ${img.width} / ${img.height}`);
+                    }
                     const styleAttr = styles.length ? `style="${styles.join('; ')}"` : '';
 
                     if (img.crop) {
@@ -440,6 +445,23 @@
                 slides.forEach(slide => observer.observe(slide));
                 updateUI(0, slides.length);
                 setTimeout(applyScaling, 100);
+
+                // Mobile browsers recompute scroll-snap positions while the
+                // URL bar animates, which can leave the page resting between
+                // slides. After scrolling settles, nudge to the nearest slide.
+                let settleTimer = null;
+                function realign() {
+                    const slideH = slides[1].offsetTop - slides[0].offsetTop;
+                    if (!slideH) return;
+                    const target = Math.round(window.scrollY / slideH) * slideH;
+                    if (Math.abs(window.scrollY - target) > 2) {
+                        window.scrollTo({ top: target, behavior: 'smooth' });
+                    }
+                }
+                window.addEventListener('scroll', () => {
+                    clearTimeout(settleTimer);
+                    settleTimer = setTimeout(realign, 140);
+                }, { passive: true });
                 return;
             }
 
