@@ -2,10 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>China</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css">
     <style>
@@ -15,16 +12,62 @@
             box-sizing: border-box;
         }
 
-        html, body {
+        html {
             height: 100%;
-            height: 100dvh;
-            overflow: hidden;
         }
 
         body {
+            min-height: 100%;
             background: #fff;
             color: #000;
             font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+        }
+
+        /*
+         * Desktop (mouse/trackpad): fixed viewport, Swiper transforms give
+         * smooth one-slide-at-a-time snapping in Chrome/Firefox/Safari.
+         */
+        @media (hover: hover) and (pointer: fine) {
+            html, body {
+                height: 100dvh;
+                overflow: hidden;
+            }
+        }
+
+        /*
+         * Touch devices: browsers only collapse their URL/tab bar when the
+         * *document* itself scrolls natively. Swiper's transform mode (and
+         * even its cssMode, which scrolls an inner container) never scrolls
+         * the document, so mobile Safari keeps its chrome visible no matter
+         * what. Here we let the page scroll natively and get snapping from
+         * CSS scroll-snap, which iOS Safari honours on touch drags.
+         */
+        @media not all and (hover: hover) and (pointer: fine) {
+            html {
+                scroll-snap-type: y mandatory;
+                overscroll-behavior-y: none;
+            }
+
+            /* Neutralise Swiper's container styles; slides stack in flow */
+            .swiper {
+                height: auto;
+                overflow: visible;
+            }
+
+            .swiper-wrapper {
+                display: block;
+                transform: none !important;
+            }
+
+            .swiper-slide {
+                height: 100vh;
+                height: 100svh; /* stable while Safari's chrome animates */
+                scroll-snap-align: start;
+            }
+
+            .page-content {
+                height: 70svh;
+            }
         }
 
         .swiper {
@@ -198,7 +241,7 @@
             }
 
             .page-content {
-                height: 75vh;
+                height: 70svh;
                 gap: 0.5rem;
             }
 
@@ -359,25 +402,57 @@
             const progressBar = document.getElementById('progress');
             const pageNumber = document.getElementById('pageNumber');
 
+            function updateUI(index, slideCount) {
+                const progress = (index / (slideCount - 1)) * 100;
+                progressBar.style.width = `${progress}%`;
+
+                // Update page number (skip header, adjust for footer)
+                if (index === 0 || index === slideCount - 1) {
+                    pageNumber.textContent = '';
+                } else {
+                    pageNumber.textContent = `${index} / ${totalSlides}`;
+                }
+            }
+
+            // Apply scaling when images load
+            document.addEventListener('load', (e) => {
+                if (e.target.tagName === 'IMG') {
+                    applyScaling();
+                }
+            }, true);
+
+            window.addEventListener('load', applyScaling);
+
+            // Touch devices: rely on native document scrolling with CSS
+            // scroll-snap (see the touch media query in the styles) so that
+            // mobile Safari/Chrome hide their browser chrome. Just track the
+            // active slide with an observer instead of Swiper events.
+            const isDesktop = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+            if (!isDesktop) {
+                const slides = Array.from(document.querySelectorAll('.swiper-slide'));
+                const observer = new IntersectionObserver((entries) => {
+                    entries.forEach(entry => {
+                        if (entry.isIntersecting) {
+                            updateUI(slides.indexOf(entry.target), slides.length);
+                        }
+                    });
+                }, { threshold: 0.55 });
+                slides.forEach(slide => observer.observe(slide));
+                updateUI(0, slides.length);
+                setTimeout(applyScaling, 100);
+                return;
+            }
+
+            // Desktop: Swiper transforms give smooth, one-slide-at-a-time
+            // snapping with the mousewheel in Chrome, Safari and Firefox.
             swiper = new Swiper('#photobook', {
                 direction: 'vertical',
-                cssMode: true,
                 mousewheel: true,
                 keyboard: true,
+                speed: 600,
                 on: {
                     slideChange: function() {
-                        const index = this.activeIndex;
-                        const progress = (index / (this.slides.length - 1)) * 100;
-                        progressBar.style.width = `${progress}%`;
-
-                        // Update page number (skip header, adjust for footer)
-                        if (index === 0) {
-                            pageNumber.textContent = '';
-                        } else if (index === this.slides.length - 1) {
-                            pageNumber.textContent = '';
-                        } else {
-                            pageNumber.textContent = `${index} / ${totalSlides}`;
-                        }
+                        updateUI(this.activeIndex, this.slides.length);
                     },
                     init: function() {
                         // Apply scaling after init
@@ -388,15 +463,6 @@
                     }
                 }
             });
-
-            // Apply scaling when images load
-            document.addEventListener('load', (e) => {
-                if (e.target.tagName === 'IMG') {
-                    applyScaling();
-                }
-            }, true);
-
-            window.addEventListener('load', applyScaling);
         }
 
         function applyScaling() {
