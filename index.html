@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>China</title>
+    <title>Japan &amp; China</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css">
     <style>
         * {
@@ -272,26 +272,36 @@
                 height: 100svh;
                 scroll-snap-align: start;
                 padding: 3svh 2vw;
+                transition: transform 0.3s ease;
             }
             /* With the bar hidden the viewport is taller than a slide.
-               The slide at rest paints a white apron below itself (an
-               extension of the page background, lifted above the next
-               slide) so no strip of the next page shows while sitting
-               still. This changes NO geometry whatsoever: no resizing,
-               no repositioning, so it can never jitter or crop. The
-               class is dropped the moment scrolling resumes. */
+               The slide at rest visually recentres itself in the taller
+               viewport (pure transform: layout and the snap grid are
+               untouched, so nothing can resize, crop or jitter) and
+               paints white aprons above/below (an extension of the page
+               background) so no strip of the neighbouring pages shows
+               while sitting still. --bar-gap is the pixel height of the
+               bar-hidden gap, measured and set by JS; the class is
+               dropped the moment scrolling resumes. */
             body.bar-hidden .swiper-slide.settled {
                 z-index: 2;
+                transform: translateY(calc(var(--bar-gap, 0px) / 2));
             }
+            body.bar-hidden .swiper-slide.settled::before,
             body.bar-hidden .swiper-slide.settled::after {
                 content: '';
                 position: absolute;
                 left: 0;
                 right: 0;
-                top: 100%;
-                /* cover the whole gap a fully-shown bar would leave */
-                height: calc(100lvh - 100svh + 6svh);
+                height: calc(var(--bar-gap, 0px) + 100px);
                 background: #fff;
+                pointer-events: none;
+            }
+            body.bar-hidden .swiper-slide.settled::before {
+                bottom: 100%;
+            }
+            body.bar-hidden .swiper-slide.settled::after {
+                top: 100%;
             }
 
             .page-content {
@@ -368,7 +378,7 @@
             // Header slide
             html += `
                 <div class="swiper-slide slide-header">
-                    <h1>CHINA</h1>
+                    <h1>JAPAN &amp; CHINA</h1>
                     <p class="subtitle">by Tim Kraus & Robin Beerman</p>
                     <div class="scroll-hint">Swipe to explore</div>
                 </div>
@@ -519,8 +529,10 @@
                 function updateFill() {
                     const h = currentSlideH();
                     if (!h) return;
+                    const gap = Math.max(0, window.innerHeight - h);
+                    document.documentElement.style.setProperty('--bar-gap', gap + 'px');
                     let idx = -1;
-                    if (window.innerHeight > h + 8) {
+                    if (gap > 8) {
                         const i = Math.round(window.scrollY / h);
                         if (Math.abs(window.scrollY - i * h) <= 4 && slides[i]) idx = i;
                     }
