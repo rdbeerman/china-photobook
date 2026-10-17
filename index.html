@@ -274,21 +274,23 @@
                 padding: 3svh 2vw;
             }
             /* With the bar hidden the viewport is taller than a slide.
-               The slide at rest then lets its content overflow its box
-               (lifted above the next slide) to fill that gap, so no strip
-               of the next page shows while sitting still. The class is
-               dropped the moment scrolling resumes, so transitions stay
-               clean and the snap grid itself never changes. */
+               The slide at rest paints a white apron below itself (an
+               extension of the page background, lifted above the next
+               slide) so no strip of the next page shows while sitting
+               still. This changes NO geometry whatsoever: no resizing,
+               no repositioning, so it can never jitter or crop. The
+               class is dropped the moment scrolling resumes. */
             body.bar-hidden .swiper-slide.settled {
                 z-index: 2;
             }
-            body.bar-hidden .swiper-slide.settled > .page-content {
+            body.bar-hidden .swiper-slide.settled::after {
+                content: '';
                 position: absolute;
-                top: 3svh;
-                left: 2vw;
-                right: 2vw;
-                width: auto;
-                height: calc(100lvh - 6svh);
+                left: 0;
+                right: 0;
+                top: 100%;
+                /* cover the whole gap a fully-shown bar would leave */
+                height: calc(100lvh - 100svh + 6svh);
                 background: #fff;
             }
 
@@ -522,11 +524,10 @@
                         const i = Math.round(window.scrollY / h);
                         if (Math.abs(window.scrollY - i * h) <= 4 && slides[i]) idx = i;
                     }
-                    if (idx === fillIdx) return; // no change, no re-scaling
+                    if (idx === fillIdx) return; // no change, nothing to do
                     fillIdx = idx;
                     document.body.classList.toggle('bar-hidden', idx !== -1);
                     slides.forEach((s, j) => s.classList.toggle('settled', j === idx));
-                    applyScaling(); // content box height changed -> resize items
                 }
 
                 function realign() {
