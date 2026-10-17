@@ -236,6 +236,16 @@
                 height: 100dvh;
                 overflow: hidden;
             }
+
+            .scroll-hint .hint-touch {
+                display: none;
+            }
+        }
+
+        @media not all and (hover: hover) and (pointer: fine) {
+            .scroll-hint .hint-desktop {
+                display: none;
+            }
         }
 
         /*
@@ -265,43 +275,15 @@
 
             .swiper-slide {
                 position: relative;
-                height: 100vh;
-                /* svh (not dvh): the snap grid must never resize while
-                   Safari's address bar animates, or landings shift by
-                   several slides on direction change. */
-                height: 100svh;
+                /* The grid is pixel-locked (--slide-h, set by JS) while
+                   scrolling so snap positions can never shift mid-flick.
+                   JS updates --slide-h to the live viewport height only
+                   when the page is at rest, then re-anchors the scroll to
+                   the same slide, so slides always exactly fill the
+                   viewport while you are looking at one. */
+                height: var(--slide-h, 100svh);
                 scroll-snap-align: start;
                 padding: 3svh 2vw;
-                transition: transform 0.3s ease;
-            }
-            /* With the bar hidden the viewport is taller than a slide.
-               The slide at rest visually recentres itself in the taller
-               viewport (pure transform: layout and the snap grid are
-               untouched, so nothing can resize, crop or jitter) and
-               paints white aprons above/below (an extension of the page
-               background) so no strip of the neighbouring pages shows
-               while sitting still. --bar-gap is the pixel height of the
-               bar-hidden gap, measured and set by JS; the class is
-               dropped the moment scrolling resumes. */
-            body.bar-hidden .swiper-slide.settled {
-                z-index: 2;
-                transform: translateY(calc(var(--bar-gap, 0px) / 2));
-            }
-            body.bar-hidden .swiper-slide.settled::before,
-            body.bar-hidden .swiper-slide.settled::after {
-                content: '';
-                position: absolute;
-                left: 0;
-                right: 0;
-                height: calc(var(--bar-gap, 0px) + 100px);
-                background: #fff;
-                pointer-events: none;
-            }
-            body.bar-hidden .swiper-slide.settled::before {
-                bottom: 100%;
-            }
-            body.bar-hidden .swiper-slide.settled::after {
-                top: 100%;
             }
 
             .page-content {
@@ -380,7 +362,7 @@
                 <div class="swiper-slide slide-header">
                     <h1>JAPAN &amp; CHINA</h1>
                     <p class="subtitle">by Tim Kraus & Robin Beerman</p>
-                    <div class="scroll-hint">Swipe to explore</div>
+                    <div class="scroll-hint"><span class="hint-touch">Swipe to explore</span><span class="hint-desktop">Scroll to explore</span></div>
                 </div>
             `;
 
@@ -507,71 +489,63 @@
                 setTimeout(applyScaling, 100);
                 window.addEventListener('resize', applyScaling);
 
-                // The slide grid uses svh and never resizes, so snapping is
-                // deterministic. Two jobs remain: (1) after scrolling settles,
-                // nudge off-snap resting positions back (bar animations shift
-                // the offset and fire no scroll events, so also listen to
-                // resize/visualViewport and retry past blocked scroll writes);
-                // (2) with the bar hidden, give the at-rest slide a `settled`
-                // class so its content visually fills the taller viewport,
-                // and drop it (via plain scroll events) before any scrolling
-                // motion reveals the overlap.
+                // The slide grid is pixel-locked (--slide-h, set by JS)
+                // while scrolling: snap positions are frozen through any
+                // touch or fling, so Safari's chrome animation cannot
+                // rescale the grid mid-flick (that rescale was the 2-3
+                // slide jump on direction reversal). Once scrolling has
+                // truly settled and the chrome stopped animating, the grid
+                // is resized exactly once to the current viewport and the
+                // scroll re-anchored to the same slide. At rest the slide
+                // therefore always fills the viewport precisely - no gap,
+                // no strip, no painted-over anything. The same re-anchor
+                // repairs any off-snap resting position.
                 let touching = false;
                 document.addEventListener('touchstart', () => { touching = true; }, { passive: true });
                 document.addEventListener('touchend', () => {
                     touching = false;
-                    scheduleRealign();
+                    scheduleSettle();
                 }, { passive: true });
 
+                const rootStyle = document.documentElement.style;
                 const currentSlideH = () => slides[1].offsetTop - slides[0].offsetTop;
-                let fillIdx = -1;
+                const setLockedHeight = h => rootStyle.setProperty('--slide-h', h + 'px');
+                setLockedHeight(window.innerHeight);
 
-                function updateFill() {
+                function settle() {
+                    if (touching) return;
                     const h = currentSlideH();
                     if (!h) return;
-                    const gap = Math.max(0, window.innerHeight - h);
-                    document.documentElement.style.setProperty('--bar-gap', gap + 'px');
-                    let idx = -1;
-                    if (gap > 8) {
-                        const i = Math.round(window.scrollY / h);
-                        if (Math.abs(window.scrollY - i * h) <= 4 && slides[i]) idx = i;
+                    const idx = Math.round(window.scrollY / h);
+                    const vh = window.innerHeight;
+                    if (Math.abs(vh - h) > 1) {
+                        // The chrome toggled while at rest: resize the grid
+                        // to the viewport and keep the same slide anchored.
+                        setLockedHeight(vh);
+                        requestAnimationFrame(() => {
+                            applyScaling();
+                            window.scrollTo(0, idx * vh);
+                        });
+                        return;
                     }
-                    if (idx === fillIdx) return; // no change, nothing to do
-                    fillIdx = idx;
-                    document.body.classList.toggle('bar-hidden', idx !== -1);
-                    slides.forEach((s, j) => s.classList.toggle('settled', j === idx));
-                }
-
-                function realign() {
-                    if (touching) { updateFill(); return; }
-                    const h = currentSlideH();
-                    if (!h) return;
-                    const target = Math.round(window.scrollY / h) * h;
+                    const target = idx * h;
                     if (Math.abs(window.scrollY - target) > 4) {
                         window.scrollTo({ top: target, behavior: 'smooth' });
                     }
-                    updateFill();
                 }
-                function scheduleRealign() {
+                function scheduleSettle() {
                     settleTimers.forEach(clearTimeout);
-                    settleTimers = [150, 450, 800].map(d => setTimeout(realign, d));
+                    settleTimers = [150, 450, 800].map(d => setTimeout(settle, d));
                 }
                 let settleTimers = [];
 
-                window.addEventListener('scroll', () => {
-                    // Any scroll motion must instantly hide the fill overlap.
-                    if (document.body.classList.contains('bar-hidden')) updateFill();
-                    scheduleRealign();
-                }, { passive: true });
-
-                const onViewportResize = () => {
-                    realign();
-                    scheduleRealign();
-                };
-                window.addEventListener('resize', onViewportResize);
+                window.addEventListener('scroll', scheduleSettle, { passive: true });
+                // Nothing happens on resize itself (that IS the chrome
+                // animating); only the quiet afterwards triggers a settle.
+                window.addEventListener('resize', scheduleSettle);
                 if (window.visualViewport) {
-                    window.visualViewport.addEventListener('resize', onViewportResize);
-                    window.visualViewport.addEventListener('scroll', scheduleRealign);
+                    window.visualViewport.addEventListener('resize', scheduleSettle);
+                    window.visualViewport.addEventListener('scroll', scheduleSettle);
                 }
                 return;
             }
@@ -677,7 +651,7 @@
             const lines = [
                 `desktop=${matchMedia('(hover: hover) and (pointer: fine)').matches} scrollY=${Math.round(scrollY)} slideH=${Math.round(slideH)}`,
                 `vw=${innerWidth} vh=${innerHeight} docW=${doc.scrollWidth} docH=${doc.scrollHeight} dpr=${devicePixelRatio}`,
-                `fill=${document.body.classList.contains('bar-hidden')} settled=${slides.findIndex(s => s.classList.contains('settled'))}`
+                `locked=${document.documentElement.style.getPropertyValue('--slide-h') || 'unset'} gap=${Math.round(innerHeight - slideH)}`
             ];
             lines.push(`slide[${idx}] rect=${Math.round(slide.getBoundingClientRect().width)}x${Math.round(slide.getBoundingClientRect().height)} pos=${Math.round(slide.getBoundingClientRect().top)} pad=${getComputedStyle(slide).padding}`);
             const pc = slide.querySelector('.page-content');
