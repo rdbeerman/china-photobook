@@ -214,7 +214,7 @@
             background: #000;
             width: 0%;
             z-index: 100;
-            transition: width 0.1s;
+            transition: width 0.1s, opacity 0.2s ease;
         }
 
         .page-number {
@@ -226,6 +226,14 @@
             letter-spacing: 0.1em;
             z-index: 50;
             pointer-events: none;
+            transition: opacity 0.2s ease;
+        }
+
+        /* The viewer's backdrop is translucent, so the book's own chrome is
+           told to step out while a photo is up. */
+        html.lightbox-open .page-number,
+        html.lightbox-open .progress {
+            opacity: 0;
         }
         /*
          * Desktop (mouse/trackpad): fixed viewport, Swiper transforms give
@@ -237,15 +245,147 @@
                 overflow: hidden;
             }
 
-            .scroll-hint .hint-touch {
+            .scroll-hint .hint-touch,
+            .lightbox-hint .hint-touch {
                 display: none;
+            }
+
+            .lightbox-open body {
+                overflow: hidden;
             }
         }
 
         @media not all and (hover: hover) and (pointer: fine) {
-            .scroll-hint .hint-desktop {
+            .scroll-hint .hint-desktop,
+            .lightbox-hint .hint-desktop {
                 display: none;
             }
+        }
+
+        /*
+         * Lightbox: tapping a photo "windows it out" to fullscreen. The frame
+         * is parked at its fullscreen geometry and animated with a transform
+         * from the tapped photo's on-screen rect (FLIP), so the photo appears
+         * to lift off the page and grow, instead of fading in somewhere else.
+         */
+        .lightbox {
+            position: fixed;
+            inset: 0;
+            z-index: 2000;
+            pointer-events: none;
+        }
+
+        .lightbox.open {
+            pointer-events: auto;
+            cursor: zoom-out;
+            /* Gestures inside the overlay must never scroll the document
+               behind it (the touch layout scrolls the page itself). */
+            touch-action: none;
+        }
+
+        .lightbox-backdrop {
+            position: absolute;
+            inset: 0;
+            background: rgba(252, 252, 252, 0.93);
+            -webkit-backdrop-filter: blur(18px) saturate(1.05);
+            backdrop-filter: blur(18px) saturate(1.05);
+            opacity: 0;
+            transition: opacity 340ms ease;
+        }
+
+        .lightbox.open .lightbox-backdrop {
+            opacity: 1;
+        }
+
+        .lightbox-frame {
+            position: absolute;
+            visibility: hidden;
+            overflow: hidden;
+            background: #fff;
+            box-shadow: 0 26px 70px rgba(0, 0, 0, 0.13), 0 2px 8px rgba(0, 0, 0, 0.06);
+            transform-origin: 0 0;
+            will-change: transform;
+        }
+
+        .lightbox.open .lightbox-frame {
+            visibility: visible;
+        }
+
+        .lightbox-frame img {
+            display: block;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            -webkit-user-drag: none;
+        }
+
+        .lightbox-ui {
+            position: absolute;
+            color: #999;
+            font-size: 0.6875rem;
+            font-family: inherit;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            /* Hidden until the viewer is open, and clickable only then:
+               otherwise the label sits over the book and the button eats
+               taps meant for the photos. */
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 200ms ease;
+        }
+
+        .lightbox.open .lightbox-ui {
+            opacity: 1;
+            pointer-events: auto;
+            transition-delay: 160ms;
+        }
+
+        .lightbox-close {
+            top: calc(3vh + env(safe-area-inset-top, 0px));
+            right: calc(3vw + env(safe-area-inset-right, 0px));
+            padding: 0.5rem;
+            background: none;
+            border: 0;
+            cursor: pointer;
+        }
+
+        .lightbox-close:hover {
+            color: #000;
+        }
+
+        /* The dialog itself takes focus on open; it must not paint a ring. */
+        .lightbox:focus {
+            outline: none;
+        }
+
+        .lightbox-hint {
+            bottom: calc(3vh + env(safe-area-inset-bottom, 0px));
+            left: 50%;
+            transform: translateX(-50%);
+            white-space: nowrap;
+        }
+
+        @media (max-height: 500px) {
+            .lightbox-ui {
+                font-size: 0.5625rem;
+            }
+
+            .lightbox-close {
+                top: 1.5vh;
+                right: 2vw;
+            }
+
+            .lightbox-hint {
+                bottom: 1.5vh;
+            }
+        }
+
+        .swiper-slide img {
+            cursor: zoom-in;
+            -webkit-tap-highlight-color: transparent;
         }
 
         /*
@@ -309,6 +449,18 @@
     </div>
 
     <div class="page-number" id="pageNumber"></div>
+
+    <div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Photo" aria-hidden="true" tabindex="-1">
+        <div class="lightbox-backdrop"></div>
+        <figure class="lightbox-frame" id="lightboxFrame">
+            <img id="lightboxImg" alt="" draggable="false">
+        </figure>
+        <button class="lightbox-ui lightbox-close" id="lightboxClose" type="button">&#10005; Close</button>
+        <div class="lightbox-ui lightbox-hint">
+            <span class="hint-touch">Tap or swipe to close</span>
+            <span class="hint-desktop">Tap anywhere or press Esc</span>
+        </div>
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
     <script>
@@ -514,6 +666,7 @@
 
                 function settle() {
                     if (touching) return;
+                    if (lbPhase !== 'closed') return; // viewer is up; leave the grid alone
                     const h = currentSlideH();
                     if (!h) return;
                     const idx = Math.round(window.scrollY / h);
@@ -629,6 +782,324 @@
                 }
             });
         }
+
+        /* -------------------- Lightbox: window a photo out -------------------- */
+
+        const lightbox = document.getElementById('lightbox');
+        const lbFrame = document.getElementById('lightboxFrame');
+        const lbImg = document.getElementById('lightboxImg');
+        const lbBackdrop = lightbox.querySelector('.lightbox-backdrop');
+
+        const LB_EASE = 'cubic-bezier(.22, .8, .28, 1)';
+        const LB_OPEN_MS = 420;
+        const LB_CLOSE_MS = 340;
+        const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+        let lbPhase = 'closed';   // closed -> opening -> open -> closing
+        let lbSource = null;      // the <img> that was tapped
+        let lbFinal = null;       // fullscreen rect the frame animates to/from
+        let lbReturnFocus = null; // where focus goes when the viewer closes
+
+        // A tap that turns into a drag (mobile fling, trackpad twitch) must
+        // never open or close the viewer.
+        const TAP_TOLERANCE = 12;
+        let pressX = null, pressY = null, lbIgnoreClick = false;
+
+        function notePress(x, y) {
+            pressX = x;
+            pressY = y;
+            // A swipe that preventDefault()ed its own click must not leave a
+            // stale suppression behind for the next tap.
+            lbIgnoreClick = false;
+        }
+        // A tap moved beyond the tolerance since it went down.
+        function draggedSincePress(e) {
+            const moved = pressX !== null &&
+                Math.hypot(e.clientX - pressX, e.clientY - pressY) > TAP_TOLERANCE;
+            pressX = pressY = null;
+            return moved;
+        }
+
+        // Pointer events for the desktop, touch events as the fallback for
+        // engines that deliver taps without them.
+        document.addEventListener('pointerdown', (e) => notePress(e.clientX, e.clientY), { passive: true });
+        document.addEventListener('touchstart', (e) => {
+            const t = e.touches[0];
+            if (t) notePress(t.clientX, t.clientY);
+        }, { passive: true });
+
+        document.getElementById('slides').addEventListener('click', (e) => {
+            const img = e.target.closest('img');
+            if (!img || lbPhase !== 'closed') return;
+            if (draggedSincePress(e)) return;
+            openLightbox(img);
+        });
+
+        // Where the tapped photo actually is on screen. Cropped photos are
+        // clipped by their wrapper (and can be zoomed with a transform), so
+        // the honest start rect is the photo's rect intersected with the clip.
+        function sourceRect(img) {
+            const r = img.getBoundingClientRect();
+            let left = r.left, top = r.top, right = r.right, bottom = r.bottom;
+            const clip = img.closest('.crop-wrapper');
+            if (clip) {
+                const c = clip.getBoundingClientRect();
+                left = Math.max(left, c.left);
+                top = Math.max(top, c.top);
+                right = Math.min(right, c.right);
+                bottom = Math.min(bottom, c.bottom);
+            }
+            return { left, top, width: right - left, height: bottom - top };
+        }
+
+        // env(safe-area-inset-*) cannot be read from JS, so measure a probe.
+        // Keeps the fullscreen photo clear of a phone notch in landscape.
+        const safeProbe = document.createElement('div');
+        safeProbe.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;visibility:hidden;'
+            + 'padding-top:env(safe-area-inset-top);padding-right:env(safe-area-inset-right);'
+            + 'padding-bottom:env(safe-area-inset-bottom);padding-left:env(safe-area-inset-left);';
+        document.head.appendChild(safeProbe);
+
+        function safeInsets() {
+            const cs = getComputedStyle(safeProbe);
+            return {
+                top: parseFloat(cs.paddingTop) || 0,
+                right: parseFloat(cs.paddingRight) || 0,
+                bottom: parseFloat(cs.paddingBottom) || 0,
+                left: parseFloat(cs.paddingLeft) || 0
+            };
+        }
+
+        // Fullscreen geometry for a photo of this aspect, with a margin that
+        // keeps a little breathing room on every edge.
+        function targetRect(ratio) {
+            const safe = safeInsets();
+            const pad = Math.round(Math.min(innerWidth, innerHeight) * 0.05);
+            const availW = innerWidth - pad * 2 - safe.left - safe.right;
+            const availH = innerHeight - pad * 2 - safe.top - safe.bottom;
+            let width = Math.min(availW, availH * ratio);
+            let height = width / ratio;
+            if (height > availH) {
+                height = availH;
+                width = height * ratio;
+            }
+            return {
+                left: safe.left + pad + (availW - width) / 2,
+                top: safe.top + pad + (availH - height) / 2,
+                width,
+                height
+            };
+        }
+
+        // Transform that puts the (fullscreen-geometry) frame exactly on a
+        // given rect. With transform-origin at the frame's own top-left, the
+        // per-axis scales land on the rect's size directly.
+        function flipTransform(rect) {
+            const sx = rect.width / lbFinal.width;
+            const sy = rect.height / lbFinal.height;
+            const dx = rect.left - lbFinal.left;
+            const dy = rect.top - lbFinal.top;
+            return `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})`;
+        }
+
+        const REST_TRANSFORM = 'translate(0px, 0px) scale(1, 1)';
+
+        function setTransform(tf, ms) {
+            lbFrame.style.transition = ms ? `transform ${ms}ms ${LB_EASE}` : 'none';
+            lbFrame.style.transform = tf;
+        }
+
+        // transitionend plus a safety timeout (a tab that goes to background
+        // mid-animation never fires the event).
+        function afterFrame(ms, done) {
+            let finished = false;
+            const finish = (e) => {
+                if (e && (e.target !== lbFrame || e.propertyName !== 'transform')) return;
+                if (finished) return;
+                finished = true;
+                lbFrame.removeEventListener('transitionend', finish);
+                clearTimeout(timer);
+                done();
+            };
+            lbFrame.addEventListener('transitionend', finish);
+            const timer = setTimeout(finish, ms + 150);
+        }
+
+        function lockBookBehind(on) {
+            document.documentElement.classList.toggle('lightbox-open', on);
+            lightbox.setAttribute('aria-hidden', on ? 'false' : 'true');
+            // Swiper's keyboard control is bound to the document, so its arrow
+            // keys would page the book behind the viewer.
+            if (swiper && swiper.keyboard) {
+                if (on) swiper.keyboard.disable(); else swiper.keyboard.enable();
+            }
+        }
+
+        function openLightbox(img) {
+            const natural = img.naturalWidth && img.naturalHeight
+                ? img.naturalWidth / img.naturalHeight
+                : (img.clientWidth / Math.max(1, img.clientHeight)) || 1;
+
+            lbSource = img;
+            lbFinal = targetRect(natural);
+
+            lbImg.src = img.currentSrc || img.src;
+            lbBackdrop.style.opacity = '';
+            lbFrame.style.left = lbFinal.left + 'px';
+            lbFrame.style.top = lbFinal.top + 'px';
+            lbFrame.style.width = lbFinal.width + 'px';
+            lbFrame.style.height = lbFinal.height + 'px';
+
+            lightbox.classList.add('open');
+            lockBookBehind(true);
+
+            const from = sourceRect(img);
+            lbPhase = 'opening';
+            if (REDUCED_MOTION || from.width < 4 || from.height < 4) {
+                setTransform(REST_TRANSFORM, 0);
+            } else {
+                setTransform(flipTransform(from), 0);
+                void lbFrame.offsetWidth; // commit the start geometry
+                requestAnimationFrame(() => setTransform(REST_TRANSFORM, LB_OPEN_MS));
+            }
+            lbImg.decode().catch(() => {});
+            afterFrame(LB_OPEN_MS, () => { if (lbPhase === 'opening') lbPhase = 'open'; });
+            // Focus the dialog (not a control) so Escape/Tab start inside it,
+            // and remember where to hand focus back to.
+            lbReturnFocus = document.activeElement;
+            lightbox.focus({ preventScroll: true });
+        }
+
+        function closeLightbox() {
+            if (lbPhase === 'closed' || lbPhase === 'closing') return;
+            lbPhase = 'closing';
+
+            let to = lbSource && lbSource.isConnected ? sourceRect(lbSource) : null;
+            if (!to || to.width < 4 || to.height < 4 ||
+                to.right < 0 || to.bottom < 0 ||
+                to.left > innerWidth || to.top > innerHeight) {
+                // The photo scrolled or resized out of view while we were
+                // looking at it: shrink towards the centre instead.
+                const w = lbFinal.width * 0.4, h = lbFinal.height * 0.4;
+                to = {
+                    left: lbFinal.left + (lbFinal.width - w) / 2,
+                    top: lbFinal.top + (lbFinal.height - h) / 2,
+                    width: w,
+                    height: h
+                };
+            }
+
+            const ms = REDUCED_MOTION ? 0 : LB_CLOSE_MS;
+            lbBackdrop.style.opacity = '0'; // fade the veil out with the photo
+            setTransform(flipTransform(to), ms);
+
+            afterFrame(ms, () => {
+                lightbox.classList.remove('open');
+                lockBookBehind(false);
+                lbFrame.style.transition = 'none';
+                lbFrame.style.transform = '';
+                lbImg.removeAttribute('src');
+                lbPhase = 'closed';
+                if (lbReturnFocus && lbReturnFocus.focus) lbReturnFocus.focus({ preventScroll: true });
+                lbReturnFocus = null;
+                // The photo may have finished decoding while we were looking
+                // at it, which changes its natural size and therefore the
+                // column geometry.
+                applyScaling();
+            });
+        }
+
+        // Rotate or resize while the photo is up: re-fit it to the new
+        // viewport. The transform (and the close animation's maths) stay
+        // relative to this geometry, so nothing has to be re-animated.
+        window.addEventListener('resize', () => {
+            if (lbPhase === 'closed') return;
+            const ratio = lbImg.naturalWidth && lbImg.naturalHeight
+                ? lbImg.naturalWidth / lbImg.naturalHeight
+                : lbFinal.width / lbFinal.height;
+            lbFinal = targetRect(ratio);
+            lbFrame.style.left = lbFinal.left + 'px';
+            lbFrame.style.top = lbFinal.top + 'px';
+            lbFrame.style.width = lbFinal.width + 'px';
+            lbFrame.style.height = lbFinal.height + 'px';
+        });
+
+        // Close on tap anywhere (the whole overlay is the close target).
+        lightbox.addEventListener('click', (e) => {
+            if (lbIgnoreClick) {
+                lbIgnoreClick = false;
+                return;
+            }
+            if (draggedSincePress(e)) return;
+            closeLightbox();
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (lbPhase === 'closed') return;
+            if (e.key === 'Escape' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                closeLightbox();
+            } else if (['ArrowDown', 'ArrowLeft', 'ArrowRight', ' ', 'Home', 'End'].includes(e.key)) {
+                e.preventDefault();
+            }
+        });
+
+        // Drag the photo with your finger; let go past a threshold (or flick)
+        // and it windows back out to where it came from.
+        let dragging = false, dragX = 0, dragY = 0, lastX = 0, lastY = 0, lastT = 0, speed = 0;
+
+        lightbox.addEventListener('touchstart', (e) => {
+            if (lbPhase === 'closed' || e.touches.length > 1) return;
+            dragging = true;
+            dragX = dragY = 0;
+            speed = 0;
+            const t = e.touches[0];
+            lastX = t.clientX;
+            lastY = t.clientY;
+            lastT = e.timeStamp;
+        }, { passive: true });
+
+        lightbox.addEventListener('touchmove', (e) => {
+            if (!dragging || lbPhase === 'closed') return;
+            const t = e.touches[0];
+            const dx = t.clientX - lastX;
+            const dy = t.clientY - lastY;
+            const dt = Math.max(1, e.timeStamp - lastT);
+            speed = Math.hypot(dx, dy) / dt;
+            lastX = t.clientX;
+            lastY = t.clientY;
+            lastT = e.timeStamp;
+
+            dragX += dx;
+            dragY += dy;
+            const far = Math.hypot(dragX, dragY);
+            if (far > TAP_TOLERANCE) {
+                e.preventDefault();
+                lbIgnoreClick = true;
+                // Keep the transform structure identical to the FLIP ones so
+                // the browser interpolates translate/scale component-wise.
+                if (lbPhase === 'open' || lbPhase === 'opening') {
+                    lbFrame.style.transition = 'none';
+                    lbFrame.style.transform = `translate(${dragX}px, ${dragY}px) scale(1, 1)`;
+                    lbBackdrop.style.opacity = String(Math.max(0.35, 1 - far / 900));
+                }
+            }
+        }, { passive: false });
+
+        function endDrag() {
+            if (!dragging) return;
+            dragging = false;
+            if (lbPhase === 'closed') return;
+            if (Math.hypot(dragX, dragY) > 70 || speed > 0.6) {
+                closeLightbox();
+            } else if (dragX || dragY) {
+                lbFrame.style.transition = `transform 300ms ${LB_EASE}`;
+                lbFrame.style.transform = REST_TRANSFORM;
+                lbBackdrop.style.opacity = '';
+            }
+        }
+        lightbox.addEventListener('touchend', endDrag, { passive: true });
+        lightbox.addEventListener('touchcancel', endDrag, { passive: true });
 
         // Remote debugging: open the page with ?debug to overlay live
         // layout numbers so a screenshot can diagnose device-only issues.
