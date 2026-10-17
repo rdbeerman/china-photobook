@@ -361,11 +361,9 @@
 
             swiper = new Swiper('#photobook', {
                 direction: 'vertical',
+                cssMode: true,
                 mousewheel: true,
                 keyboard: true,
-                speed: 600,
-                touchRatio: 1,
-                threshold: 10,
                 on: {
                     slideChange: function() {
                         const index = this.activeIndex;
@@ -412,30 +410,6 @@
                 }
             });
         }
-
-        // iOS Safari: trigger native scroll to hide browser chrome
-        function hideIOSChrome() {
-            if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
-                // Temporarily make body scrollable and scroll down
-                document.body.style.height = 'calc(100dvh + 1px)';
-                document.body.style.overflow = 'auto';
-
-                setTimeout(() => {
-                    window.scrollTo(0, 1);
-                    setTimeout(() => {
-                        document.body.style.height = '100dvh';
-                        document.body.style.overflow = 'hidden';
-                        window.scrollTo(0, 0);
-                    }, 50);
-                }, 100);
-            }
-        }
-
-        // Try to hide chrome on first touch
-        document.addEventListener('touchstart', function onFirstTouch() {
-            hideIOSChrome();
-            document.removeEventListener('touchstart', onFirstTouch);
-        }, { once: true });
 
         init();
     </script>
