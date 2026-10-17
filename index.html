@@ -191,7 +191,7 @@
             }
 
             .page-content {
-                height: 90vh;
+                height: 80vh;
             }
 
             .page-number {
@@ -358,20 +358,32 @@
             requestAnimationFrame(() => {
                 document.querySelectorAll('.page-content').forEach(content => {
                     content.style.transform = '';
-                    const maxWidth = window.innerWidth * 0.9;
+                    const maxWidth = window.innerWidth * 0.92;
+                    const maxHeight = window.innerHeight * 0.85;
                     const actualWidth = content.scrollWidth;
-                    if (actualWidth > maxWidth) {
-                        const scale = maxWidth / actualWidth;
+                    const actualHeight = content.scrollHeight;
+
+                    const scaleX = actualWidth > maxWidth ? maxWidth / actualWidth : 1;
+                    const scaleY = actualHeight > maxHeight ? maxHeight / actualHeight : 1;
+                    const scale = Math.min(scaleX, scaleY);
+
+                    if (scale < 1) {
                         content.style.transform = `scale(${scale})`;
                     }
                 });
             });
         }
 
-        // Recalculate scaling on resize
-        window.addEventListener('resize', () => {
-            applyScaling();
-        });
+        // Recalculate scaling on resize and after images load
+        window.addEventListener('resize', applyScaling);
+        window.addEventListener('load', applyScaling);
+
+        // Also apply scaling when lazy images load
+        document.addEventListener('load', (e) => {
+            if (e.target.tagName === 'IMG') {
+                applyScaling();
+            }
+        }, true);
 
         function setupScrollTracking() {
             const pages = document.querySelectorAll('.page');
