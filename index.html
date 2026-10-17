@@ -477,20 +477,38 @@
 
                 // Mobile browsers recompute scroll-snap positions while the
                 // URL bar animates, which can leave the page resting between
-                // slides. After scrolling settles, nudge to the nearest slide.
-                let settleTimer = null;
+                // slides. After scrolling settles, nudge back to the nearest
+                // slide. The bar animation fires no scroll events (only
+                // resize/visualViewport ones) and can even shift the scroll
+                // offset itself, so listen to all of them and retry a few
+                // times, skipping while the finger is still on the screen.
+                let touching = false;
+                document.addEventListener('touchstart', () => { touching = true; }, { passive: true });
+                document.addEventListener('touchend', () => {
+                    touching = false;
+                    scheduleRealign();
+                }, { passive: true });
+
+                let settleTimers = [];
                 function realign() {
+                    if (touching) return;
                     const slideH = slides[1].offsetTop - slides[0].offsetTop;
                     if (!slideH) return;
                     const target = Math.round(window.scrollY / slideH) * slideH;
-                    if (Math.abs(window.scrollY - target) > 2) {
+                    if (Math.abs(window.scrollY - target) > 4) {
                         window.scrollTo({ top: target, behavior: 'smooth' });
                     }
                 }
-                window.addEventListener('scroll', () => {
-                    clearTimeout(settleTimer);
-                    settleTimer = setTimeout(realign, 250);
-                }, { passive: true });
+                function scheduleRealign() {
+                    settleTimers.forEach(clearTimeout);
+                    settleTimers = [150, 450, 800].map(d => setTimeout(realign, d));
+                }
+                window.addEventListener('scroll', scheduleRealign, { passive: true });
+                window.addEventListener('resize', scheduleRealign);
+                if (window.visualViewport) {
+                    window.visualViewport.addEventListener('resize', scheduleRealign);
+                    window.visualViewport.addEventListener('scroll', scheduleRealign);
+                }
                 return;
             }
 
